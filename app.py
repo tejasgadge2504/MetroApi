@@ -12,15 +12,22 @@ creds_json = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
 if not creds_json:
     raise Exception("Missing GOOGLE_APPLICATION_CREDENTIALS_JSON in environment variables")
 
+# 🔑 Fix Render issue: Replace literal \n with actual newlines in private key
+creds_json = creds_json.replace('\\n', '\n')
+
 creds_dict = json.loads(creds_json)
-creds = service_account.Credentials.from_service_account_info(creds_dict, scopes=[
-    "https://spreadsheets.google.com/feeds",
-    "https://www.googleapis.com/auth/drive",
-])
+creds = service_account.Credentials.from_service_account_info(
+    creds_dict,
+    scopes=[
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive",
+    ],
+)
 client = gspread.authorize(creds)
 
 # Replace with your actual spreadsheet ID
 SPREADSHEET_ID = "17cOylW-cc5fKKzHhyknUqwJCOuhwEJkjifVyh8WN5l8"
+
 
 @app.route("/next_trains", methods=["GET"])
 def next_trains():
@@ -39,7 +46,6 @@ def next_trains():
         return jsonify({"error": f"Could not open sheet: {str(e)}"}), 500
 
     data = sheet.get_all_values()
-
     if not data or len(data) < 2:
         return jsonify({"error": "No timetable data found"}), 404
 
@@ -63,15 +69,12 @@ def next_trains():
         return jsonify({"error": "Invalid time format, use HH:MM or HH:MM:SS"}), 400
 
     results = []
-
     for row in timetable:
-        if source_idx >= len(row) or dest_idx >= len(row):
+        if source_idx >= len(row):
             continue
 
         dep_time_str = row[source_idx].strip()
-        arr_time_str = row[dest_idx].strip()
-
-        if not dep_time_str or not arr_time_str:
+        if not dep_time_str:
             continue
 
         try:
@@ -80,23 +83,29 @@ def next_trains():
             dep_time = dep_time.replace(year=now.year, month=now.month, day=now.day)
 
             if dep_time > now:
-                results.append({
-                    "departure": dep_time_str,
-                    "arrival": arr_time_str
-                })
+                results.append({"departure": dep_time_str})
         except Exception:
             continue
 
     # Take next 3 trains
     next_trains = results[:3]
-
     output = {
         "train1": next_trains[0] if len(next_trains) > 0 else None,
         "train2": next_trains[1] if len(next_trains) > 1 else None,
         "train3": next_trains[2] if len(next_trains) > 2 else None,
     }
-
     return jsonify(output)
+
+
+# ✅ Debug route to check if Google Sheets auth is working
+@app.route("/check-auth")
+def check_auth():
+    try:
+        spreadsheet = client.open_by_key(SPREADSHEET_ID)
+        return jsonify({"status": "success", "sheets": [ws.title for ws in spreadsheet.worksheets()]})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 
 if __name__ == "__main__":
     app.run(debug=True)
