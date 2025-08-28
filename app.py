@@ -55,8 +55,9 @@ def next_trains():
 
     # Parse user input time
     try:
-        fmt = "%H:%M:%S" if input_time_str.count(":") == 2 else "%H:%M"
-        now = datetime.datetime.strptime(input_time_str, fmt)
+        clean_time = input_time_str.strip('"').strip("'")   # 🟢 remove quotes if present
+        fmt = "%H:%M:%S" if clean_time.count(":") == 2 else "%H:%M"
+        now = datetime.datetime.strptime(clean_time, fmt)
         today = datetime.datetime.now()
         now = now.replace(year=today.year, month=today.month, day=today.day)
     except Exception:
